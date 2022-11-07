@@ -6,3 +6,4 @@ datasets/*
 training_result_images/
 inception_score_graph.txt
 .vscode/
+environment.yml
