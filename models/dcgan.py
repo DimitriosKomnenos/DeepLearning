@@ -100,7 +100,8 @@ class DCGAN_MODEL(object):
         self.batch_size = args.batch_size
 
         # Set the logger
-        self.logger = Logger('./logs')
+        self.logger = Logger('./logs'+'DCGAN_'+str(self.epochs))
+        self.logger.writer.flush()
         self.number_of_images = 10
 
     # cuda support
@@ -211,8 +212,8 @@ class DCGAN_MODEL(object):
 
                     time = t.time() - self.t_begin
                     #print("Inception score: {}".format(inception_score))
-                    print("Generator iter: {}".format(generator_iter))
-                    print("Time {}".format(time))
+                    #print("Generator iter: {}".format(generator_iter))
+                    #print("Time {}".format(time))
 
                     # Write to file inception_score, gen_iters, time
                     #output = str(generator_iter) + " " + str(time) + " " + str(inception_score[0]) + "\n"
@@ -228,19 +229,20 @@ class DCGAN_MODEL(object):
                     # TensorBoard logging
                     # Log the scalar values
                     info = {
-                        'd_loss': d_loss.data,
-                        'g_loss': g_loss.data
+                        'Loss D': d_loss.data,
+                        'Loss G': g_loss.data
                     }
 
                     for tag, value in info.items():
-                        self.logger.scalar_summary(tag, value, generator_iter)
+                        self.logger.scalar_summary(tag, value.mean().cpu(), generator_iter)
 
                     # Log values and gradients of the parameters
+                    '''
                     for tag, value in self.D.named_parameters():
                         tag = tag.replace('.', '/')
                         self.logger.histo_summary(tag, self.to_np(value), generator_iter)
                         self.logger.histo_summary(tag + '/grad', self.to_np(value.grad), generator_iter)
-
+                    '''
                     # Log the images while training
                     info = {
                         'real_images': self.real_images(images, self.number_of_images),

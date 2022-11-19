@@ -5,9 +5,11 @@ from models.gan import GAN
 from models.dcgan import DCGAN_MODEL
 from models.wgan_clipping import WGAN_CP
 from models.wgan_gradient_penalty import WGAN_GP
-
+import torch
 
 def main(args):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(device)
     model = None
     if args.model == 'GAN':
         model = GAN(args)

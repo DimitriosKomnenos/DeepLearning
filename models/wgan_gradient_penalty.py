@@ -108,7 +108,7 @@ class WGAN_GP(object):
         self.g_optimizer = optim.Adam(self.G.parameters(), lr=self.learning_rate, betas=(self.b1, self.b2))
 
         # Set the logger
-        self.logger = Logger('./logs')
+        self.logger = Logger('./logs'+'WGAN_GC'+str(args.generator_iters))
         self.logger.writer.flush()
         self.number_of_images = 10
 

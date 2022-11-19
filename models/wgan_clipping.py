@@ -102,7 +102,7 @@ class WGAN_CP(object):
         self.g_optimizer = torch.optim.RMSprop(self.G.parameters(), lr=self.learning_rate)
 
         # Set the logger
-        self.logger = Logger('./logs')
+        self.logger = Logger('./logs'+'WGAN_CP'+str(args.generator_iters))
         self.logger.writer.flush()
         self.number_of_images = 10
 
@@ -180,7 +180,6 @@ class WGAN_CP(object):
                 d_loss = d_loss_fake - d_loss_real
                 Wasserstein_D = d_loss_real - d_loss_fake
                 self.d_optimizer.step()
-                print(f'  Discriminator iteration: {d_iter}/{self.critic_iter}, loss_fake: {d_loss_fake.data}, loss_real: {d_loss_real.data}')
 
 
 
@@ -199,7 +198,8 @@ class WGAN_CP(object):
             g_loss.backward(one)
             g_cost = -g_loss
             self.g_optimizer.step()
-            print(f'Generator iteration: {g_iter}/{self.generator_iters}, g_loss: {g_loss.data}')
+            #print(f'Generator iteration: {g_iter}/{self.generator_iters}, g_loss: {g_loss.data}')
+            #print(f'  Discriminator iteration: {d_iter}/{self.critic_iter}, loss_fake: {d_loss_fake.data}, loss_real: {d_loss_real.data}')
 
             # Saving model and sampling images every 1000th generator iterations
             if (g_iter) % SAVE_PER_TIMES == 0:
@@ -266,6 +266,7 @@ class WGAN_CP(object):
         self.t_end = t.time()
         print('Time of training-{}'.format((self.t_end - self.t_begin)))
         #self.file.close()
+
 
         # Save the trained parameters
         self.save_model()
