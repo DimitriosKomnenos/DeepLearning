@@ -33,16 +33,18 @@ class GAN(object):
         # check if cuda is available
         self.check_cuda(args.cuda)
 
-        # Binary cross entropy loss and optimizer
+        # Binary cross entropy loss and Adam optimizer
         self.loss = nn.BCELoss()
         self.d_optimizer = torch.optim.Adam(self.D.parameters(), lr=0.0002, weight_decay=0.00001)
         self.g_optimizer = torch.optim.Adam(self.G.parameters(), lr=0.0002, weight_decay=0.00001)
 
         # Set the logger
         self.logger = Logger('./logs')
+        self.logger.writer.flush()
         self.number_of_images = 10
         self.epochs = args.epochs
         self.batch_size = args.batch_size
+
 
     # Cuda support
     def check_cuda(self, cuda_flag=False):
@@ -198,7 +200,7 @@ class GAN(object):
         return generated_images
 
     def to_np(self, x):
-        return x.data.cpu().numpy()
+        return x.F.cpu().numpy()
 
     def save_model(self):
         torch.save(self.G.state_dict(), './generator.pkl')

@@ -5,7 +5,7 @@ import numpy as np
 class Logger(object):
     def __init__(self, log_dir):
         """Create a summary writer logging to log_dir."""
-        self.writer = tf.summary.create_file_writer(log_dir)
+        self.writer = tf.summary.create_file_writer(log_dir,name='pro')
 
     def scalar_summary(self, tag, value, step):
         """Log a scalar variable."""
@@ -35,3 +35,8 @@ class Logger(object):
         """Log a histogram of the tensor of values."""
         with self.writer.as_default():
             tf.summary.histogram('{}'.format(tag), values, buckets=bins, step=step)
+        data = [[s] for s in bird_scores]
+        table = wandb.Table(data=data, columns=["bird_scores"])
+        wandb.log({'my_histogram': wandb.plot.histogram(table, "bird_scores",
+                                                        title="Bird Confidence Scores")})
+
