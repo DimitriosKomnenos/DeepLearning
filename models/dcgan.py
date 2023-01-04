@@ -3,10 +3,16 @@ import torch.nn as nn
 from torch.autograd import Variable
 import time as t
 import os
+import numpy as np
+from PIL import Image as PILImage
+import shutil
 from utils.tensorboard_logger import Logger
 from utils.inception_score import get_inception_score
 from itertools import chain
 from torchvision import utils
+from utils.calculate_fid_score import calc_fid_score, calc_IS_score, calc_IS_score_from_grid, calc_fid_score_grid
+import wandb
+
 
 class Generator(torch.nn.Module):
     def __init__(self, channels):
@@ -32,7 +38,7 @@ class Generator(torch.nn.Module):
 
             # State (256x16x16)
             nn.ConvTranspose2d(in_channels=256, out_channels=channels, kernel_size=4, stride=2, padding=1))
-            # output of main module --> Image (Cx32x32)
+        # output of main module --> Image (Cx32x32)
 
         self.output = nn.Tanh()
 
@@ -61,7 +67,7 @@ class Discriminator(torch.nn.Module):
             nn.Conv2d(in_channels=512, out_channels=1024, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(1024),
             nn.LeakyReLU(0.2, inplace=True))
-            # outptut of main module --> State (1024x4x4)
+        # outptut of main module --> State (1024x4x4)
 
         self.output = nn.Sequential(
             nn.Conv2d(in_channels=1024, out_channels=1, kernel_size=4, stride=1, padding=0),
@@ -75,7 +81,8 @@ class Discriminator(torch.nn.Module):
     def feature_extraction(self, x):
         # Use discriminator for feature extraction then flatten to vector of 16384 features
         x = self.main_module(x)
-        return x.view(-1, 1024*4*4)
+        return x.view(-1, 1024 * 4 * 4)
+
 
 class DCGAN_MODEL(object):
     def __init__(self, args):
@@ -83,6 +90,10 @@ class DCGAN_MODEL(object):
         self.G = Generator(args.channels)
         self.D = Discriminator(args.channels)
         self.C = args.channels
+
+        wandb.init(project="Deep-Learning", config=args)
+        wandb.watch(self.G, log_freq=10)
+        wandb.watch(self.D, log_freq=100)
 
         # binary cross entropy loss and optimizer
         self.loss = nn.BCELoss()
@@ -99,9 +110,8 @@ class DCGAN_MODEL(object):
         self.epochs = args.epochs
         self.batch_size = args.batch_size
 
-        # Set the logger
-        self.logger = Logger('./logs'+'DCGAN_'+str(self.epochs))
-        self.logger.writer.flush()
+        self.dataset = args.dataset
+        self.model = args.model
         self.number_of_images = 10
 
     # cuda support
@@ -114,11 +124,10 @@ class DCGAN_MODEL(object):
             print("Cuda enabled flag: ")
             print(self.cuda)
 
-
     def train(self, train_loader):
         self.t_begin = t.time()
         generator_iter = 0
-        #self.file = open("inception_score_graph.txt", "w")
+        # self.file = open("inception_score_graph.txt", "w")
 
         for epoch in range(self.epochs):
             self.epoch_start_time = t.time()
@@ -128,17 +137,17 @@ class DCGAN_MODEL(object):
                 if i == train_loader.dataset.__len__() // self.batch_size:
                     break
 
-                z = torch.rand((self.batch_size, 100, 1, 1))
+                z = torch.rand((self.batch_size, 32, 1, 1))
                 real_labels = torch.ones(self.batch_size)
                 fake_labels = torch.zeros(self.batch_size)
 
                 if self.cuda:
                     images, z = Variable(images).cuda(self.cuda_index), Variable(z).cuda(self.cuda_index)
-                    real_labels, fake_labels = Variable(real_labels).cuda(self.cuda_index), Variable(fake_labels).cuda(self.cuda_index)
+                    real_labels, fake_labels = Variable(real_labels).cuda(self.cuda_index), Variable(fake_labels).cuda(
+                        self.cuda_index)
                 else:
                     images, z = Variable(images), Variable(z)
                     real_labels, fake_labels = Variable(real_labels), Variable(fake_labels)
-
 
                 # Train discriminator
                 # Compute BCE_Loss using real images
@@ -179,28 +188,33 @@ class DCGAN_MODEL(object):
                 self.g_optimizer.step()
                 generator_iter += 1
 
-
-                if generator_iter % 1000 == 0:
+                if generator_iter % 800 == 0:
                     # Workaround because graphic card memory can't store more than 800+ examples in memory for generating image
                     # Therefore doing loop and generating 800 examples and stacking into list of samples to get 8000 generated images
                     # This way Inception score is more correct since there are different generated examples from every class of Inception model
-                    # sample_list = []
-                    # for i in range(10):
-                    #     z = Variable(torch.randn(800, 100, 1, 1)).cuda(self.cuda_index)
-                    #     samples = self.G(z)
-                    #     sample_list.append(samples.data.cpu().numpy())
-                    #
+                    sample_list = []
+                    for i in range(10):
+                        z = Variable(torch.randn(800, 100, 1, 1)).cuda(self.cuda_index)
+                        samples = self.G(z)
+                        sample_list.append(samples.data.cpu().numpy())
+
                     # # Flattening list of lists into one list of numpy arrays
-                    # new_sample_list = list(chain.from_iterable(sample_list))
+                    new_sample_list = list(chain.from_iterable(sample_list))
                     # print("Calculating Inception Score over 8k generated images")
                     # # Feeding list of numpy arrays
                     # inception_score = get_inception_score(new_sample_list, cuda=True, batch_size=32,
-                    #                                       resize=True, splits=10)
+                    #                                     resize=True, splits=10)
                     print('Epoch-{}'.format(epoch + 1))
                     self.save_model()
 
-                    if not os.path.exists('training_result_images/'):
-                        os.makedirs('training_result_images/')
+                    if not os.path.exists('training_DCGAN_images_grid/'):
+                        os.makedirs('training_DCGAN_images_grid/')
+
+                    if not os.path.exists('training_DCGAN_images/' + self.dataset + '/'):
+                        os.makedirs('training_DCGAN_images/' + self.dataset + '/')
+
+                    if not os.path.exists('training_DCGAN_images_IS/' + self.dataset + '/'):
+                        os.makedirs('training_DCGAN_images_IS/' + self.dataset + '/')
 
                     # Denormalize images and save them in grid 8x8
                     z = Variable(torch.randn(800, 100, 1, 1)).cuda(self.cuda_index)
@@ -208,54 +222,86 @@ class DCGAN_MODEL(object):
                     samples = samples.mul(0.5).add(0.5)
                     samples = samples.data.cpu()[:64]
                     grid = utils.make_grid(samples)
-                    utils.save_image(grid, 'training_result_images/img_generatori_iter_{}.png'.format(str(generator_iter).zfill(3)))
+                    utils.save_image(grid,
+                                     'training_DCGAN_images_grid/' + '/img_generator_iter_{}.png'.format(
+                                         str(generator_iter).zfill(3)))
+                    i = 0
+                    for im in samples:
+                        utils.save_image(im,
+                                         'training_DCGAN_images_IS/' + self.dataset + '/img_{}_{}.png'.format(
+                                             str(generator_iter).zfill(3), i))
+                        utils.save_image(im,
+                                         'training_DCGAN_images/' + self.dataset + '/img_{}.png'.format(i))
+                        i = i + 1
+
+                    wandb.log({
+                        "Generated Images": [wandb.Image(im) for im in grid]})
+
+                    if(self.dataset == "cifar"):
+                        fid = calc_fid_score_grid('training_DCGAN_images/' + self.dataset + '/', self.dataset)
+                    else:
+                        fid = calc_fid_score_grid('training_DCGAN_images/' + self.dataset + '/', self.dataset)
+
+                    wandb.log({
+                        "FID score for " + self.dataset + " and model " + self.model: fid})
+
+                    is_score = calc_IS_score('training_DCGAN_images_IS/' + self.dataset + '/', self.dataset)
+                    wandb.log({
+                        "IS score for " + self.dataset + " and model " + self.model: is_score})
 
                     time = t.time() - self.t_begin
-                    #print("Inception score: {}".format(inception_score))
-                    #print("Generator iter: {}".format(generator_iter))
-                    #print("Time {}".format(time))
-
                     # Write to file inception_score, gen_iters, time
-                    #output = str(generator_iter) + " " + str(time) + " " + str(inception_score[0]) + "\n"
-                    #self.file.write(output)
-
+                    # output = str(generator_iter) + " " + str(time) + " " + str(inception_score[0]) + "\n"
+                    # self.file.write(output)
 
                 if ((i + 1) % 100) == 0:
                     print("Epoch: [%2d] [%4d/%4d] D_loss: %.8f, G_loss: %.8f" %
-                          ((epoch + 1), (i + 1), train_loader.dataset.__len__() // self.batch_size, d_loss.data, g_loss.data))
+                          ((epoch + 1), (i + 1), train_loader.dataset.__len__() // self.batch_size, d_loss.data,
+                           g_loss.data))
 
                     z = Variable(torch.randn(self.batch_size, 100, 1, 1).cuda(self.cuda_index))
 
-                    # TensorBoard logging
+                    # Wandb logging
                     # Log the scalar values
-                    info = {
+                    wandb.log({
                         'Loss D': d_loss.data,
-                        'Loss G': g_loss.data
-                    }
+                        'Loss G': g_loss.data,
+                        'Loss D Real': d_loss_real.data,
+                        'Loss D Fake': d_loss_fake.data
+                    })
 
-                    for tag, value in info.items():
-                        self.logger.scalar_summary(tag, value.mean().cpu(), generator_iter)
+                    if (self.dataset == "cifar"):
+                        wandb.log({
+                            "real_images": [wandb.Image(PILImage.fromarray(im, mode="RGB")) for im in self.real_images(images, self.number_of_images)]})
+                        wandb.log({
+                            "generated_images": [wandb.Image(PILImage.fromarray(im, mode="RGB")) for im in self.generate_img(z, self.number_of_images)]})
+                    else:
+                        wandb.log({
+                            "real_images": [wandb.Image(im) for im in self.real_images(images, self.number_of_images)]})
+                        wandb.log({
+                            "generated_images": [wandb.Image(im) for im in
+                                                 self.generate_img(z, self.number_of_images)]})
+
+                    # is_score = calc_IS_score_from_grid(self.generate_img(z, self.number_of_images))
+
+                    # wandb.log({
+                    #   "IS score for " + self.dataset + " and model " + self.model: is_score})
+
+                    # for tag, value in info.items():
+                    #   self.logger.scalar_summary(tag, value, generator_iter)
 
                     # Log values and gradients of the parameters
-                    '''
-                    for tag, value in self.D.named_parameters():
-                        tag = tag.replace('.', '/')
-                        self.logger.histo_summary(tag, self.to_np(value), generator_iter)
-                        self.logger.histo_summary(tag + '/grad', self.to_np(value.grad), generator_iter)
-                    '''
-                    # Log the images while training
-                    info = {
-                        'real_images': self.real_images(images, self.number_of_images),
-                        'generated_images': self.generate_img(z, self.number_of_images)
-                    }
+                    # for tag, value in self.D.named_parameters():
+                    # tag = tag.replace('.', '/')
+                    # self.logger.histo_summary(tag, self.to_np(value), generator_iter)
+                    # self.logger.histo_summary(tag + '/grad', self.to_np(value.grad), generator_iter)
 
-                    for tag, images in info.items():
-                        self.logger.image_summary(tag, images, generator_iter)
-
+                    # for tag, images in info.items():
+                    #   self.logger.image_summary(tag, images, generator_iter)
 
         self.t_end = t.time()
         print('Time of training-{}'.format((self.t_end - self.t_begin)))
-        #self.file.close()
+        self.file.close()
 
         # Save the trained parameters
         self.save_model()
@@ -321,12 +367,12 @@ class DCGAN_MODEL(object):
         alpha = 1.0 / float(number_int + 1)
         print(alpha)
         for i in range(1, number_int + 1):
-            z_intp.data = z1*alpha + z2*(1.0 - alpha)
+            z_intp.data = z1 * alpha + z2 * (1.0 - alpha)
             alpha += alpha
             fake_im = self.G(z_intp)
-            fake_im = fake_im.mul(0.5).add(0.5) #denormalize
-            images.append(fake_im.view(self.C,32,32).data.cpu())
+            fake_im = fake_im.mul(0.5).add(0.5)  # denormalize
+            images.append(fake_im.view(self.C, 32, 32).data.cpu())
 
-        grid = utils.make_grid(images, nrow=number_int )
+        grid = utils.make_grid(images, nrow=number_int)
         utils.save_image(grid, 'interpolated_images/interpolated_{}.png'.format(str(number).zfill(3)))
         print("Saved interpolated images to interpolated_images/interpolated_{}.".format(str(number).zfill(3)))

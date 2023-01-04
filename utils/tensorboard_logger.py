@@ -35,3 +35,8 @@ class Logger(object):
         """Log a histogram of the tensor of values."""
         with self.writer.as_default():
             tf.summary.histogram('{}'.format(tag), values, buckets=bins, step=step)
+        data = [[s] for s in bird_scores]
+        table = wandb.Table(data=data, columns=["bird_scores"])
+        wandb.log({'my_histogram': wandb.plot.histogram(table, "bird_scores",
+                                                        title="Bird Confidence Scores")})
+

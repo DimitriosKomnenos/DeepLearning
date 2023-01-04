@@ -5,11 +5,13 @@ import time as t
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 import os
-from utils.tensorboard_logger import Logger
 from torchvision import utils
+import wandb
+from PIL import Image as PILImage
+from utils.calculate_fid_score import calc_fid_score, calc_IS_score, calc_IS_score_from_grid, calc_fid_score_grid
 
 
-SAVE_PER_TIMES = 1000
+SAVE_PER_TIMES = 100
 
 class Generator(torch.nn.Module):
     def __init__(self, channels):
@@ -86,6 +88,10 @@ class WGAN_CP(object):
         print("WGAN_CP init model.")
         self.G = Generator(args.channels)
         self.D = Discriminator(args.channels)
+
+        wandb.init(project="Deep-Learning", config=args)
+        wandb.watch(self.G, log_freq=10)
+        wandb.watch(self.D, log_freq=100)
         self.C = args.channels
 
         # check if cuda is available
@@ -100,14 +106,13 @@ class WGAN_CP(object):
         # WGAN with gradient clipping uses RMSprop instead of ADAM
         self.d_optimizer = torch.optim.RMSprop(self.D.parameters(), lr=self.learning_rate)
         self.g_optimizer = torch.optim.RMSprop(self.G.parameters(), lr=self.learning_rate)
-
-        # Set the logger
-        self.logger = Logger('./logs'+'WGAN_CP'+str(args.generator_iters))
-        self.logger.writer.flush()
         self.number_of_images = 10
 
         self.generator_iters = args.generator_iters
         self.critic_iter = 5
+        self.dataset = args.dataset
+        self.model = args.model
+        self.number_of_images = 10
 
     def get_torch_variable(self, arg):
         if self.cuda:
@@ -181,8 +186,6 @@ class WGAN_CP(object):
                 Wasserstein_D = d_loss_real - d_loss_fake
                 self.d_optimizer.step()
 
-
-
             # Generator update
             for p in self.D.parameters():
                 p.requires_grad = False  # to avoid computation
@@ -198,11 +201,13 @@ class WGAN_CP(object):
             g_loss.backward(one)
             g_cost = -g_loss
             self.g_optimizer.step()
-            #print(f'Generator iteration: {g_iter}/{self.generator_iters}, g_loss: {g_loss.data}')
-            #print(f'  Discriminator iteration: {d_iter}/{self.critic_iter}, loss_fake: {d_loss_fake.data}, loss_real: {d_loss_real.data}')
 
+
+            #wandb.log({"Generator iteration": g_iter/self.generator_iters, "g_loss": g_loss.data})
+            #wandb.log({"Discriminator iteration": d_iter, "d_loss_fake": d_loss_fake.data, "d_loss_real": d_loss_real.data})
             # Saving model and sampling images every 1000th generator iterations
-            if (g_iter) % SAVE_PER_TIMES == 0:
+            if g_iter % SAVE_PER_TIMES == 0:
+                print("g iter save is:" + str(g_iter))
                 self.save_model()
                 # Workaround because graphic card memory can't store more than 830 examples in memory for generating image
                 # Therefore doing loop and generating 800 examples and stacking into list of samples to get 8000 generated images
@@ -220,8 +225,11 @@ class WGAN_CP(object):
                 # inception_score = get_inception_score(new_sample_list, cuda=True, batch_size=32,
                 #                                       resize=True, splits=10)
 
-                if not os.path.exists('training_result_images/'):
-                    os.makedirs('training_result_images/')
+                if not os.path.exists('training_WGAN-CP_images/' + self.dataset + '/'):
+                    os.makedirs('training_WGAN-CP_images/' + self.dataset + '/')
+
+                if not os.path.exists('training_WGAN-CP_images_IS/' + self.dataset + '/'):
+                    os.makedirs('training_WGAN-CP_images_IS/' + self.dataset + '/')
 
                 # Denormalize images and save them in grid 8x8
                 z = self.get_torch_variable(torch.randn(800, 100, 1, 1))
@@ -229,7 +237,28 @@ class WGAN_CP(object):
                 samples = samples.mul(0.5).add(0.5)
                 samples = samples.data.cpu()[:64]
                 grid = utils.make_grid(samples)
-                utils.save_image(grid, 'training_result_images/img_generatori_iter_{}.png'.format(str(g_iter).zfill(3)))
+                #utils.save_image(grid, 'training_result_images/img_generatori_iter_{}.png'.format(str(g_iter).zfill(3)))
+
+                i = 0
+                for im in samples:
+                    utils.save_image(im,
+                                     'training_WGAN-CP_images_IS/' + self.dataset + '/img_{}_{}.png'.format(
+                                         str(g_iter).zfill(3), i))
+                    utils.save_image(im,
+                                     'training_WGAN-CP_images/' + self.dataset + '/img_{}.png'.format(i))
+                    i = i + 1
+
+                wandb.log({
+                    "Generated Images": [wandb.Image(im) for im in grid]})
+
+                fid = calc_fid_score_grid('training_WGAN-CP_images/' + self.dataset + '/', self.dataset)
+
+                wandb.log({
+                    "FID score for " + self.dataset + "and model " + self.model: fid/4})
+
+                is_score = calc_IS_score('training_WGAN-CP_images_IS/' + self.dataset + '/', self.dataset)
+                wandb.log({
+                    "IS score for " + self.dataset + " and model " + self.model: is_score})
 
                 # Testing
                 time = t.time() - self.t_begin
@@ -241,27 +270,32 @@ class WGAN_CP(object):
                 #output = str(g_iter) + " " + str(time) + " " + str(inception_score[0]) + "\n"
                 #self.file.write(output)
 
-                # ============ TensorBoard logging ============#
+                # ===========Wandb logging ============#
                 # (1) Log the scalar values
-                info = {
+                wandb.log({
                     'Wasserstein distance': Wasserstein_D.data,
                     'Loss D': d_loss.data,
-                    'Loss G': g_cost.data,
+                    'G cost': g_cost.data,
+                    'Loss G': g_loss.data,
                     'Loss D Real': d_loss_real.data,
                     'Loss D Fake': d_loss_fake.data
-                }
+                })
 
-                for tag, value in info.items():
-                    self.logger.scalar_summary(tag, value.mean().cpu(), g_iter + 1)
-
-                # (3) Log the images
-                info = {
-                    'real_images': self.real_images(images, self.number_of_images),
-                    'generated_images': self.generate_img(z, self.number_of_images)
-                }
-
-                for tag, images in info.items():
-                    self.logger.image_summary(tag, images, g_iter + 1)
+                if (self.dataset == "cifar"):
+                    wandb.log({
+                        "real_images": [wandb.Image(PILImage.fromarray(im, mode="RGB")) for im in
+                                        self.real_images(images, self.number_of_images)]})
+                    wandb.log({
+                        "generated_images": [wandb.Image(PILImage.fromarray(im, mode="RGB")) for im in
+                                             self.generate_img(z, self.number_of_images)]})
+                else:
+                    wandb.log({
+                        "real_images": [wandb.Image(im) for im in self.real_images(images, self.number_of_images)]})
+                    wandb.log({
+                        "generated_images": [wandb.Image(im) for im in
+                                             self.generate_img(z, self.number_of_images)]})
+                #for tag, images in info.items():
+                    #self.logger.image_summary(tag, images, g_iter + 1)
 
         self.t_end = t.time()
         print('Time of training-{}'.format((self.t_end - self.t_begin)))
@@ -283,9 +317,9 @@ class WGAN_CP(object):
 
     def real_images(self, images, number_of_images):
         if (self.C == 3):
-            return self.to_np(images.view(-1, self.C, 32, 32)[:self.number_of_images])
+            return self.to_np(images.view(-1, self.C, 32, 32)[:number_of_images])
         else:
-            return self.to_np(images.view(-1, 32, 32)[:self.number_of_images])
+            return self.to_np(images.view(-1, 32, 32)[:number_of_images])
 
     def generate_img(self, z, number_of_images):
         samples = self.G(z).data.cpu().numpy()[:number_of_images]
