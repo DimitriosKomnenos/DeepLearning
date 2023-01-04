@@ -22,32 +22,38 @@ class Generator(torch.nn.Module):
         # Input_dim = 100
         # Output_dim = C (number of channels)
         self.conv1 = nn.utils.spectral_norm(
-            nn.ConvTranspose2d(in_channels=100, out_channels=1024, kernel_size=4, stride=1, padding=0))
+            nn.ConvTranspose2d(in_channels=100, out_channels=512, kernel_size=4, stride=1, padding=0))
         self.conv2 = nn.utils.spectral_norm(
-            nn.ConvTranspose2d(in_channels=1024, out_channels=512, kernel_size=4, stride=2, padding=1))
-        self.conv3 = nn.utils.spectral_norm(
             nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2, padding=1))
+        self.conv3 = nn.utils.spectral_norm(
+            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=1))
         self.conv4 = nn.utils.spectral_norm(
-            nn.ConvTranspose2d(in_channels=256, out_channels=channels, kernel_size=4, stride=2, padding=1))
+            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1))
+        self.conv5 = nn.utils.spectral_norm(
+            nn.ConvTranspose2d(in_channels=64, out_channels=channels, kernel_size=3, stride=1, padding=1))
 
         self.main_module = nn.Sequential(
             # Z latent vector 100
-            self.conv1,
-            nn.BatchNorm2d(num_features=1024),
-            nn.ReLU(True),
-
-            # State (1024x4x4)
-            self.conv2,
+            nn.ConvTranspose2d(in_channels=100, out_channels=512, kernel_size=4, stride=1, padding=0),
             nn.BatchNorm2d(num_features=512),
             nn.ReLU(True),
 
-            # State (512x8x8)
-            self.conv3,
+            # State (1024x4x4)
+            nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(num_features=256),
             nn.ReLU(True),
 
+            # State (512x8x8)
+            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(num_features=128),
+            nn.ReLU(True),
+
+            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(num_features=64),
+            nn.ReLU(True),
+
             # State (256x16x16)
-            self.conv4)
+            nn.ConvTranspose2d(in_channels=64, out_channels=channels, kernel_size=3, stride=1, padding=1))
         # output of main module --> Image (Cx32x32)
 
         self.output = nn.Tanh()
@@ -64,34 +70,58 @@ class Discriminator(torch.nn.Module):
         # Input_dim = channels (Cx64x64)
 
         self.conv1 = nn.utils.spectral_norm(
-            nn.Conv2d(in_channels=channels, out_channels=256, kernel_size=4, stride=2, padding=1))
+            nn.Conv2d(in_channels=channels, out_channels=64, kernel_size=3, stride=1, padding=1))
         self.conv2 = nn.utils.spectral_norm(
-            nn.Conv2d(in_channels=256, out_channels=512, kernel_size=4, stride=2, padding=1))
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=2, padding=1))
         self.conv3 = nn.utils.spectral_norm(
-            nn.Conv2d(in_channels=512, out_channels=1024, kernel_size=4, stride=2, padding=1))
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1))
         self.conv4 = nn.utils.spectral_norm(
-            nn.Conv2d(in_channels=1024, out_channels=1, kernel_size=4, stride=1, padding=0))
+            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=4, stride=2, padding=1))
+        self.conv5 = nn.utils.spectral_norm(
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1))
+        self.conv6 = nn.utils.spectral_norm(
+            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=4, stride=2, padding=1))
+        self.conv7 = nn.utils.spectral_norm(
+            nn.Conv2d(in_channels=256, out_channels=512, kernel_size=3, stride=1, padding=1))
+        self.conv8 = nn.utils.spectral_norm(
+            nn.Conv2d(in_channels=512, out_channels=1, kernel_size=4, stride=1, padding=0))
         # Output_dim = 1
         self.main_module = nn.Sequential(
             # Image (Cx32x32)
             self.conv1,
-            nn.BatchNorm2d(num_features=256),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.BatchNorm2d(num_features=64),
+            nn.LeakyReLU(0.1, inplace=True),
 
             # State (256x16x16)
             self.conv2,
-            nn.BatchNorm2d(num_features=512),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.BatchNorm2d(num_features=64),
+            nn.LeakyReLU(0.1, inplace=True),
 
             # State (512x8x8)
             self.conv3,
-            nn.BatchNorm2d(num_features=1024),
-            nn.LeakyReLU(0.2, inplace=True))
+            nn.BatchNorm2d(num_features=128),
+            nn.LeakyReLU(0.1, inplace=True),
+            #
+            self.conv4,
+            nn.BatchNorm2d(num_features=128),
+            nn.LeakyReLU(0.1, inplace=True),
+#           
+            self.conv5,
+            nn.BatchNorm2d(num_features=256),
+            nn.LeakyReLU(0.1, inplace=True),
+
+            self.conv6,
+            nn.BatchNorm2d(num_features=256),
+            nn.LeakyReLU(0.1, inplace=True),
+
+            self.conv7,
+            nn.BatchNorm2d(num_features=512),
+            nn.LeakyReLU(0.1, inplace=True))
         # output of main module --> State (1024x4x4)
 
         self.output = nn.Sequential(
             # The output of D is no longer a probability, we do not apply sigmoid at the output of D.
-            self.conv4)
+            self.conv8)
 
     def forward(self, x):
         x = self.main_module(x)
@@ -100,7 +130,7 @@ class Discriminator(torch.nn.Module):
     def feature_extraction(self, x):
         # Use discriminator for feature extraction then flatten to vector of 16384
         x = self.main_module(x)
-        return x.view(-1, 1024 * 4 * 4)
+        return x.view(-1, 512 * 4 * 4)
 
 
 class WGAN_SN(object):

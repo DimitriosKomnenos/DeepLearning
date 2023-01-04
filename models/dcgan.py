@@ -242,7 +242,7 @@ class DCGAN_MODEL(object):
                         fid = calc_fid_score_grid('training_DCGAN_images/' + self.dataset + '/', self.dataset)
 
                     wandb.log({
-                        "FID score for " + self.dataset + " and model " + self.model: fid/4})
+                        "FID score for " + self.dataset + " and model " + self.model: fid})
 
                     is_score = calc_IS_score('training_DCGAN_images_IS/' + self.dataset + '/', self.dataset)
                     wandb.log({
