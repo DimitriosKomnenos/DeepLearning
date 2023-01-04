@@ -61,9 +61,9 @@ python main.py --model WGAN-GP \
 *Generated examples MNIST, CIFAR-10*
 ---
 
-<img src="images/img_32.png" width="800">
+<img src="images/img_32.png" width="64">
 
 
-<img src="images/img_43.png" width="770">
+<img src="images/img_43.png" width="64">
 
-<img src="images/img_generator_iter_27000.png" width="800">
+<img src="images/img_generator_iter_27000.png" width="150">
