@@ -109,6 +109,7 @@ class DCGAN_MODEL(object):
 
         self.epochs = args.epochs
         self.batch_size = args.batch_size
+
         self.dataset = args.dataset
         self.model = args.model
         self.number_of_images = 10
@@ -249,10 +250,6 @@ class DCGAN_MODEL(object):
                         "IS score for " + self.dataset + " and model " + self.model: is_score})
 
                     time = t.time() - self.t_begin
-                    # print("Inception score: {}".format(inception_score))
-                    print("Generator iter: {}".format(generator_iter))
-                    print("Time {}".format(time))
-
                     # Write to file inception_score, gen_iters, time
                     # output = str(generator_iter) + " " + str(time) + " " + str(inception_score[0]) + "\n"
                     # self.file.write(output)

@@ -202,11 +202,9 @@ class WGAN_CP(object):
             g_cost = -g_loss
             self.g_optimizer.step()
 
+
             #wandb.log({"Generator iteration": g_iter/self.generator_iters, "g_loss": g_loss.data})
             #wandb.log({"Discriminator iteration": d_iter, "d_loss_fake": d_loss_fake.data, "d_loss_real": d_loss_real.data})
-            #print(f'Generator iteration: {g_iter}/{self.generator_iters}, g_loss: {g_loss.data}')
-            #print(f'  Discriminator iteration: {d_iter}/{self.critic_iter}, loss_fake: {d_loss_fake.data}, loss_real: {d_loss_real.data}')
-
             # Saving model and sampling images every 1000th generator iterations
             if g_iter % SAVE_PER_TIMES == 0:
                 print("g iter save is:" + str(g_iter))
