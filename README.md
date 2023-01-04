@@ -4,7 +4,7 @@ This is the pytorch implementation of 3 different GAN models using same convolut
 
 - DCGAN (Deep convolutional GAN)
 - WGAN-CP (Wasserstein GAN using weight clipping)
-- WGAN-GP (Wasserstein GAN using gradient penalty)
+- SNWGAN (Wasserstein GAN using spectral normalization)
 
 
 
@@ -27,24 +27,23 @@ pip install -r requirements.txt
 
  *Training*
  ---
-Running training of DCGAN model on Fashion-MNIST dataset:
+Running training of DCGAN model on MNIST dataset:
 
 
 ```
 python main.py --model DCGAN \
                --is_train True \
                --download True \
-               --dataroot datasets/fashion-mnist \
-               --dataset fashion-mnist \
+               --dataroot datasets/mnist \
                --epochs 30 \
                --cuda True \
                --batch_size 64
 ```
 
-Running training of WGAN-GP model on CIFAR-10 dataset:
+Running training of WGAN-CP model on CIFAR-10 dataset:
 
 ```
-python main.py --model WGAN-GP \
+python main.py --model WGAN-CP \
                --is_train True \
                --download True \
                --dataroot datasets/cifar \
